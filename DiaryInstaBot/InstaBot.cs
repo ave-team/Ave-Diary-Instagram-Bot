@@ -1,4 +1,6 @@
-﻿using DiaryInstaBot.Classes;
+﻿using DiaryInstaBot;
+using DiaryInstaBot.Classes;
+using DiaryInstaBot.Entities;
 using InstagramApiSharp;
 using InstagramApiSharp.API;
 using InstagramApiSharp.API.Builder;
@@ -18,11 +20,14 @@ namespace AveDiaryInstaBot
 {
     public class InstaBot
     {
-        private const string AveDiaryApiBaseLink = "https://avediary.online/api.php";
+        private const long BotId = 17389287231;
+
         private IInstaApi instaApi;
         private IRequestDelay instaApiDelay;
         private BotSettings botSettings;
         private bool isStopRequested = false;
+        private DatabaseContext dbContext = new DatabaseContext();
+        private DiaryApiHelper diaryApi = new DiaryApiHelper();
 
         public InstaBot()
         {
@@ -34,6 +39,7 @@ namespace AveDiaryInstaBot
 
             InitializeInstaApi();
             Authorize().Wait();
+            this.dbContext.Database.EnsureCreated();
         }
         private void InitializeInstaApi()
         {
@@ -79,6 +85,73 @@ namespace AveDiaryInstaBot
             if (isAuthorized)
                 SaveSession();
         }
+        private async void ApprovePendingUsers()
+        {
+            var pendingUsers = await this.instaApi.MessagingProcessor
+                        .GetPendingDirectAsync(PaginationParameters.MaxPagesToLoad(1));
+
+            if (pendingUsers.Value.PendingRequestsCount > 0)
+            {
+                foreach (var thread in pendingUsers.Value.Inbox.Threads)
+                {
+                    await this.instaApi.MessagingProcessor
+                        .ApproveDirectPendingRequestAsync(thread.ThreadId.ToString());
+                }
+            }
+        }
+        private async void ProcessMessage(InstaDirectInboxItem message, string threadId)
+        {
+            if (message.ItemType == InstaDirectThreadItemType.Text)
+            {
+                if (message.Text.Contains(this.botSettings.Commands.Login))
+                {
+                    string answer = string.Empty;
+
+                    var words = message.Text.Split();
+                    if (words.Count() != 2)
+                        answer = "Перепрошую, але я не розумію. Увійдіть до свого класу за наступним шаблоном: /login myClassLogin";
+                    else
+                    {
+                        string classLogin = words.Last();
+                        bool isClassLoginExists = await this.diaryApi.IsClassLoginExists(classLogin);
+                        if (isClassLoginExists)
+                        {
+                            if (IsStudentExistsInDatabase(threadId))
+                                UpdateStudent(threadId, classLogin);
+                            else
+                                AddNewStudent(threadId, classLogin);
+                            answer = "Я запам’ятала! Щоб змінити клас використайте повторно команду /login";
+                        }
+                        else
+                            answer = $"Перепрошую, але класу із логіном {classLogin} не існує";
+                    }
+
+                    await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
+                }
+            }
+        }
+        private bool IsStudentExistsInDatabase(string threadId)
+        {
+            var student = this.dbContext.Students.SingleOrDefault(dbStudent => dbStudent.ThreadId == threadId);
+            return student != null;
+        }
+        private void AddNewStudent(string threadId, string classLogin)
+        {
+            var newStudent = new Student
+            {
+                ThreadId = threadId,
+                ClassLogin = classLogin
+            };
+
+            this.dbContext.Students.Add(newStudent);
+            this.dbContext.SaveChanges();
+        }
+        private void UpdateStudent(string threadId, string newClassLogin)
+        {
+            var dbStudent = this.dbContext.Students.First(student => student.ThreadId == threadId);
+            dbStudent.ClassLogin = newClassLogin;
+            this.dbContext.SaveChanges();
+        }
 
         public async Task StartPolling()
         {
@@ -95,38 +168,14 @@ namespace AveDiaryInstaBot
                     {
                         foreach(var message in thread.Items)
                         {
-                            ProcessMessage(message, thread.ThreadId);
+                            if(message.UserId != BotId)
+                                ProcessMessage(message, thread.ThreadId);
                         }
                     }
 
                     Thread.Sleep(TimeSpan.FromSeconds(1));
                 }
             });
-        }
-        private async void ApprovePendingUsers()
-        {
-            var pendingUsers = await this.instaApi.MessagingProcessor
-                        .GetPendingDirectAsync(PaginationParameters.MaxPagesToLoad(1));
-
-            foreach (var thread in pendingUsers.Value.Inbox.Threads)
-            {
-                await this.instaApi.MessagingProcessor
-                    .ApproveDirectPendingRequestAsync(thread.ThreadId.ToString());
-            }
-        }
-        private async void ProcessMessage(InstaDirectInboxItem message, string threadId)
-        {
-            if (message.ItemType == InstaDirectThreadItemType.Text)
-            {
-                if (message.Text.Contains(this.botSettings.Commands.Login))
-                {
-                    string answer = "Напиши мені логін класу.";
-                    await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
-                }
-                // To-Do:
-                // Save Processing User data
-                // ThreadId, IsLoginedInDiary
-            }
         }
         public void StopPolling()
         {
