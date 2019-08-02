@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace AveDiaryInstaBot
 {
@@ -18,7 +19,6 @@ namespace AveDiaryInstaBot
         private IRequestDelay instaApiDelay;
         private BotSettings botSettings;
 
-
         public InstaBot()
         {
             using (var reader = new StreamReader("settings.json"))
@@ -28,6 +28,7 @@ namespace AveDiaryInstaBot
             }
 
             InitializeInstaApi();
+            Authorize().Wait();
         }
         private void InitializeInstaApi()
         {
@@ -37,6 +38,41 @@ namespace AveDiaryInstaBot
                  .UseLogger(new DebugLogger(LogLevel.Exceptions))
                  .SetRequestDelay(this.instaApiDelay)
                  .Build();
+        }
+        private async Task<bool> Authenticate()
+        {
+            if (!this.instaApi.IsUserAuthenticated)
+            {
+                Console.WriteLine($"Logging in as @{botSettings.LoginData.UserName}");
+
+                this.instaApiDelay.Disable();
+                var logInResult = await instaApi.LoginAsync();
+                this.instaApiDelay.Enable();
+
+                if (!logInResult.Succeeded)
+                {
+                    Console.WriteLine($"Unable to login: {logInResult.Info.Message}");
+                    return false;
+                }
+
+                Console.WriteLine("Successfully authorized!");
+            }
+            return true;
+        }
+        private void SaveSession(string stateFile = "state.bin")
+        {
+            var state = instaApi.GetStateDataAsStream();
+            using (var fileStream = File.Create(stateFile))
+            {
+                state.Seek(0, SeekOrigin.Begin);
+                state.CopyTo(fileStream);
+            }
+        }
+        private async Task Authorize()
+        {
+            bool isAuthorized = await Authenticate();
+            if (isAuthorized)
+                SaveSession();
         }
     }
 }
