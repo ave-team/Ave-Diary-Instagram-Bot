@@ -1,9 +1,12 @@
-﻿using InstagramApiSharp.API;
+﻿using DiaryInstaBot.Classes;
+using InstagramApiSharp.API;
 using InstagramApiSharp.API.Builder;
 using InstagramApiSharp.Classes;
 using InstagramApiSharp.Logger;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace AveDiaryInstaBot
@@ -13,15 +16,16 @@ namespace AveDiaryInstaBot
         private const string AveDiaryApiBaseLink = "https://avediary.online/api.php";
         private IInstaApi instaApi;
         private IRequestDelay instaApiDelay;
-        private UserSessionData loginData;
+        private BotSettings botSettings;
 
-        public InstaBot(string username, string password)
+
+        public InstaBot()
         {
-            this.loginData = new UserSessionData
+            using (var reader = new StreamReader("settings.json"))
             {
-                UserName = username,
-                Password = password
-            };
+                string json = reader.ReadToEnd();
+                this.botSettings = JsonConvert.DeserializeObject<BotSettings>(json);
+            }
 
             InitializeInstaApi();
         }
@@ -29,7 +33,7 @@ namespace AveDiaryInstaBot
         {
             this.instaApiDelay = RequestDelay.FromSeconds(2, 2);
             this.instaApi = InstaApiBuilder.CreateBuilder()
-                 .SetUser(this.loginData)
+                 .SetUser(this.botSettings.LoginData)
                  .UseLogger(new DebugLogger(LogLevel.Exceptions))
                  .SetRequestDelay(this.instaApiDelay)
                  .Build();
