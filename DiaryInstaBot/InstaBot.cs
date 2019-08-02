@@ -1,13 +1,17 @@
 ﻿using DiaryInstaBot.Classes;
+using InstagramApiSharp;
 using InstagramApiSharp.API;
 using InstagramApiSharp.API.Builder;
 using InstagramApiSharp.Classes;
+using InstagramApiSharp.Classes.Models;
 using InstagramApiSharp.Logger;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AveDiaryInstaBot
@@ -18,6 +22,7 @@ namespace AveDiaryInstaBot
         private IInstaApi instaApi;
         private IRequestDelay instaApiDelay;
         private BotSettings botSettings;
+        private bool isStopRequested = false;
 
         public InstaBot()
         {
@@ -73,6 +78,59 @@ namespace AveDiaryInstaBot
             bool isAuthorized = await Authenticate();
             if (isAuthorized)
                 SaveSession();
+        }
+
+        public async Task StartPolling()
+        {
+            await Task.Run(async () =>
+            {
+                while (!this.isStopRequested)
+                {
+                    ApprovePendingUsers();
+
+                    var messages = await this.instaApi.MessagingProcessor
+                        .GetDirectInboxAsync(PaginationParameters.MaxPagesToLoad(1));
+                    var threads = messages.Value.Inbox.Threads;
+                    foreach(var thread in threads)
+                    {
+                        foreach(var message in thread.Items)
+                        {
+                            ProcessMessage(message, thread.ThreadId);
+                        }
+                    }
+
+                    Thread.Sleep(TimeSpan.FromSeconds(1));
+                }
+            });
+        }
+        private async void ApprovePendingUsers()
+        {
+            var pendingUsers = await this.instaApi.MessagingProcessor
+                        .GetPendingDirectAsync(PaginationParameters.MaxPagesToLoad(1));
+
+            foreach (var thread in pendingUsers.Value.Inbox.Threads)
+            {
+                await this.instaApi.MessagingProcessor
+                    .ApproveDirectPendingRequestAsync(thread.ThreadId.ToString());
+            }
+        }
+        private async void ProcessMessage(InstaDirectInboxItem message, string threadId)
+        {
+            if (message.ItemType == InstaDirectThreadItemType.Text)
+            {
+                if (message.Text.Contains(this.botSettings.Commands.Login))
+                {
+                    string answer = "Напиши мені логін класу.";
+                    await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
+                }
+                // To-Do:
+                // Save Processing User data
+                // ThreadId, IsLoginedInDiary
+            }
+        }
+        public void StopPolling()
+        {
+            this.isStopRequested = true;
         }
     }
 }

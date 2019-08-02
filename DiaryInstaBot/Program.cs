@@ -11,6 +11,10 @@ namespace DiaryInstaBot
             Console.OutputEncoding = Encoding.UTF8;
 
             InstaBot bot = new InstaBot();
+            bot.StartPolling();
+
+            Console.ReadLine();
+            bot.StopPolling();
         }
     }
 }
