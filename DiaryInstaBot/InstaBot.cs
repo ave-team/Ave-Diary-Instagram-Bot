@@ -37,9 +37,24 @@ namespace AveDiaryInstaBot
                 this.botSettings = JsonConvert.DeserializeObject<BotSettings>(json);
             }
 
+            ConnectToDb();
             InitializeInstaApi();
             Authorize().Wait();
-            this.dbContext.Database.EnsureCreated();
+        }
+        private void ConnectToDb()
+        {
+            try
+            {
+                this.dbContext.Database.EnsureCreated();
+            }
+            catch (AggregateException ex)
+            {
+                Console.WriteLine("Unable to connect to Database. Check is it running now or verify connection string");
+                Console.WriteLine("Additional error data:\n");
+                Console.WriteLine($"Error message: {ex.Message}");
+                Console.WriteLine($"Error trace: {ex.StackTrace}");
+                Console.WriteLine($"Error innerException: {ex.InnerException}");
+            }
         }
         private void InitializeInstaApi()
         {
