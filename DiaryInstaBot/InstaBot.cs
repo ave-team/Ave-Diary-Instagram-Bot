@@ -1,6 +1,7 @@
 ﻿using DiaryInstaBot;
 using DiaryInstaBot.Classes;
 using DiaryInstaBot.Entities;
+using DiaryInstaBot.Enumerations;
 using InstagramApiSharp;
 using InstagramApiSharp.API;
 using InstagramApiSharp.API.Builder;
@@ -120,14 +121,25 @@ namespace AveDiaryInstaBot
         {
             if (message.ItemType == InstaDirectThreadItemType.Text)
             {
-                if (IsLoginCommand(message.Text))
+                if (IsCommand(message.Text, CommandType.Login))
                     ProcessLoginCommand(message.Text, threadId);
+                if (IsCommand(message.Text, CommandType.Help))
+                    ProcessHelpCommand(threadId);
             }
         }
-        private bool IsLoginCommand(string messageText)
+        private bool IsCommand(string messageText, CommandType commandType)
         {
-            return this.botSettings.Commands.Login
-                .Any(loginWord => messageText.ToLower().Contains(loginWord));
+            messageText = messageText.ToLower();
+            
+            switch (commandType)
+            {
+                case CommandType.Login:
+                    return this.botSettings.Commands.Login.Any(loginWord => messageText.Contains(loginWord));
+                case CommandType.Help:
+                    return this.botSettings.Commands.Help.Any(helpWord => messageText.Contains(helpWord));
+                default:
+                    return false;
+            } 
         }
         private async void ProcessLoginCommand(string messageText, string threadId)
         {
@@ -175,6 +187,16 @@ namespace AveDiaryInstaBot
             var dbStudent = this.dbContext.Students.First(student => student.ThreadId == threadId);
             dbStudent.ClassLogin = newClassLogin;
             this.dbContext.SaveChanges();
+        }
+        private async void ProcessHelpCommand(string threadId)
+        {
+            StringBuilder answer = new StringBuilder("Список ключевих слів для команд:\n");
+            answer.Append("Help (Допомога):\n");
+            this.botSettings.Commands.Help.ForEach(command => answer.Append($"{command}\n"));
+            answer.Append("Login (Вхід):\n");
+            this.botSettings.Commands.Login.ForEach(command => answer.Append($"{command}\n"));
+
+            await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer.ToString());
         }
 
         public void StartPolling()
