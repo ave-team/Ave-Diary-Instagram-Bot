@@ -6,7 +6,7 @@ using System.Text;
 
 namespace DiaryInstaBot.ApiResponses
 {
-    public class TomorrowHomeworkResponse
+    public class HomeworkResponse
     {
         [JsonProperty("dz")]
         public string Homework { get; set; }

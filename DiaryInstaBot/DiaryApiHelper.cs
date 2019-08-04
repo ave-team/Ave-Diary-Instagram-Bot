@@ -43,7 +43,18 @@ namespace DiaryInstaBot
                 throw new Exception("Ave Diary Api returned error status code");
 
             var jsonResult = await response.Content.ReadAsStringAsync();
-            var tomorrowHomeworkResponse = JsonConvert.DeserializeObject<TomorrowHomeworkResponse>(jsonResult);
+            var tomorrowHomeworkResponse = JsonConvert.DeserializeObject<HomeworkResponse>(jsonResult);
+            return tomorrowHomeworkResponse.Homework;
+        }
+        public async Task<string> GetAllHomework(string classLogin)
+        {
+            var response = await this.http.GetAsync($"?login={classLogin}&type=json&date=all");
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception("Ave Diary Api returned error status code");
+
+            var jsonResult = await response.Content.ReadAsStringAsync();
+            var tomorrowHomeworkResponse = JsonConvert.DeserializeObject<HomeworkResponse>(jsonResult);
             return tomorrowHomeworkResponse.Homework;
         }
     }
