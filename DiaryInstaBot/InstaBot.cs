@@ -54,6 +54,7 @@ namespace AveDiaryInstaBot
                 Console.WriteLine($"Error message: {ex.Message}");
                 Console.WriteLine($"Error trace: {ex.StackTrace}");
                 Console.WriteLine($"Error innerException: {ex.InnerException}");
+                Environment.Exit(1);
             }
         }
         private void InitializeInstaApi()
