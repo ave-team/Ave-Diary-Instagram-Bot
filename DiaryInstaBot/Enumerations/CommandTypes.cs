@@ -7,6 +7,8 @@ namespace DiaryInstaBot.Enumerations
     enum CommandType
     {
         Help,
-        Login
+        Login,
+        TomorrowHomework,
+        AllHomework
     }
 }

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using DiaryInstaBot.ApiResponses;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,11 +13,6 @@ namespace DiaryInstaBot
 {
     public class DiaryApiHelper
     {
-        private class IsUserExistsResponse
-        {
-            public bool Result { get; set; }
-        }
-
         private HttpClient http;
 
         public DiaryApiHelper()
@@ -35,8 +31,20 @@ namespace DiaryInstaBot
                 throw new Exception("Ave Diary Api returned error status code");
 
             var jsonResult = await response.Content.ReadAsStringAsync();
-            var isUserExists = JsonConvert.DeserializeObject<IsUserExistsResponse>(jsonResult);
+            var isUserExists = JsonConvert.DeserializeObject<IsClassLoginExistsResponse>(jsonResult);
             return isUserExists.Result;
+        }
+
+        public async Task<string> GetTomorrowHomework(string classLogin)
+        {
+            var response = await this.http.GetAsync($"?login={classLogin}&type=json&date=tomorrow");
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception("Ave Diary Api returned error status code");
+
+            var jsonResult = await response.Content.ReadAsStringAsync();
+            var tomorrowHomeworkResponse = JsonConvert.DeserializeObject<TomorrowHomeworkResponse>(jsonResult);
+            return tomorrowHomeworkResponse.Homework;
         }
     }
 }

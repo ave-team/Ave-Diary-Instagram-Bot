@@ -102,6 +102,11 @@ namespace AveDiaryInstaBot
             bool isAuthorized = await Login();
             if (isAuthorized)
                 SaveSession();
+            else
+            {
+                Console.WriteLine("FAILED TO LOG IN");
+                Environment.Exit(1);
+            }
         }
         private async void ApprovePendingUsers()
         {
@@ -123,8 +128,10 @@ namespace AveDiaryInstaBot
             {
                 if (IsCommand(message.Text, CommandType.Login))
                     ProcessLoginCommand(message.Text, threadId);
-                if (IsCommand(message.Text, CommandType.Help))
+                else if (IsCommand(message.Text, CommandType.Help))
                     ProcessHelpCommand(threadId);
+                else if (IsCommand(message.Text, CommandType.TomorrowHomework))
+                    ProcessTomorrowHomeworkCommand(threadId);
             }
         }
         private bool IsCommand(string messageText, CommandType commandType)
@@ -137,6 +144,10 @@ namespace AveDiaryInstaBot
                     return this.botSettings.Commands.Login.Any(loginWord => messageText.Contains(loginWord));
                 case CommandType.Help:
                     return this.botSettings.Commands.Help.Any(helpWord => messageText.Contains(helpWord));
+                case CommandType.TomorrowHomework:
+                    return this.botSettings.Commands.TomorrowHomework.Any(homeworkWord => messageText.Contains(homeworkWord));
+                case CommandType.AllHomework:
+                    return this.botSettings.Commands.AllHomework.Any(allHomeworkWord => messageText.Contains(allHomeworkWord));
                 default:
                     return false;
             } 
@@ -198,6 +209,26 @@ namespace AveDiaryInstaBot
 
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer.ToString());
         }
+        private async void ProcessTomorrowHomeworkCommand(string threadId)
+        {
+            var dbStudent = this.dbContext.Students.SingleOrDefault(student => student.ThreadId == threadId);
+            if(dbStudent == null)
+            {
+                string answer = "Перепрошую, але я не знаю логін твого класу. Добав його командою: долучитися classLogin";
+                await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
+                return;
+            }
+
+            string homework = await this.diaryApi.GetTomorrowHomework(dbStudent.ClassLogin);
+            if(string.IsNullOrWhiteSpace(homework))
+            {
+                string answer = "На завтра нічого не задано!";
+                await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
+                return;
+            }
+
+            await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, homework);
+        }
 
         public void StartPolling()
         {
@@ -209,7 +240,7 @@ namespace AveDiaryInstaBot
                     ApprovePendingUsers();
 
                     var messages = await this.instaApi.MessagingProcessor
-                        .GetDirectInboxAsync(PaginationParameters.MaxPagesToLoad(1));
+                        .GetDirectInboxAsync(PaginationParameters.MaxPagesToLoad(2));
                     var threads = messages.Value.Inbox.Threads;
                     foreach (var thread in threads)
                     {

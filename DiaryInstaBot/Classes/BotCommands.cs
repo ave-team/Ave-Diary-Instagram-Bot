@@ -8,5 +8,7 @@ namespace DiaryInstaBot.Classes
     {
         public List<string> Login { get; set; }
         public List<string> Help { get; set; }
+        public List<string> TomorrowHomework { get; set; }
+        public List<string> AllHomework { get; set; }
     }
 }
