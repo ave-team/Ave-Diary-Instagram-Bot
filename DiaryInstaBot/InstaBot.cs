@@ -99,36 +99,43 @@ namespace AveDiaryInstaBot
                 }
             }
         }
-        private async void ProcessMessage(InstaDirectInboxItem message, string threadId)
+        private void ProcessMessage(InstaDirectInboxItem message, string threadId)
         {
             if (message.ItemType == InstaDirectThreadItemType.Text)
             {
-                if (message.Text.Contains(this.botSettings.Commands.Login))
-                {
-                    string answer = string.Empty;
-
-                    var words = message.Text.Split();
-                    if (words.Count() != 2)
-                        answer = "Перепрошую, але я не розумію. Увійдіть до свого класу за наступним шаблоном: /login myClassLogin";
-                    else
-                    {
-                        string classLogin = words.Last();
-                        bool isClassLoginExists = await this.diaryApi.IsClassLoginExists(classLogin);
-                        if (isClassLoginExists)
-                        {
-                            if (IsStudentExistsInDatabase(threadId))
-                                UpdateStudent(threadId, classLogin);
-                            else
-                                AddNewStudent(threadId, classLogin);
-                            answer = "Я запам’ятала! Щоб змінити клас використайте повторно команду /login";
-                        }
-                        else
-                            answer = $"Перепрошую, але класу із логіном {classLogin} не існує";
-                    }
-
-                    await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
-                }
+                if (IsLoginCommand(message.Text))
+                    ProcessLoginCommand(message.Text, threadId);
             }
+        }
+        private bool IsLoginCommand(string messageText)
+        {
+            return this.botSettings.Commands.Login
+                .Any(loginWord => messageText.ToLower().Contains(loginWord));
+        }
+        private async void ProcessLoginCommand(string messageText, string threadId)
+        {
+            string answer = string.Empty;
+
+            var words = messageText.Split();
+            if (words.Count() != 2)
+                answer = "Перепрошую, але я не розумію. Увійдіть до свого класу за наступним шаблоном:\nувійти myClassLogin";
+            else
+            {
+                string classLogin = words.Last();
+                bool isClassLoginExists = await this.diaryApi.IsClassLoginExists(classLogin);
+                if (isClassLoginExists)
+                {
+                    if (IsStudentExistsInDatabase(threadId))
+                        UpdateStudent(threadId, classLogin);
+                    else
+                        AddNewStudent(threadId, classLogin);
+                    answer = "Я запам’ятала! Щоб змінити клас використайте повторно команду /login";
+                }
+                else
+                    answer = $"Перепрошую, але класу із логіном {classLogin} не існує";
+            }
+
+            await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
         }
         private bool IsStudentExistsInDatabase(string threadId)
         {
@@ -173,7 +180,7 @@ namespace AveDiaryInstaBot
                         }
                     }
 
-                    Thread.Sleep(TimeSpan.FromSeconds(1));
+                    Thread.Sleep(TimeSpan.FromSeconds(0.5));
                 }
             });
         }

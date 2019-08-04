@@ -6,6 +6,6 @@ namespace DiaryInstaBot.Classes
 {
     public class BotCommands
     {
-        public string Login { get; set; }
+        public List<string> Login { get; set; }
     }
 }
