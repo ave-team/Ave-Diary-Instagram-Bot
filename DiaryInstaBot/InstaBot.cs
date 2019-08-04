@@ -28,6 +28,7 @@ namespace AveDiaryInstaBot
         private bool isStopRequested = false;
         private DatabaseContext dbContext = new DatabaseContext();
         private DiaryApiHelper diaryApi = new DiaryApiHelper();
+        private Task pollingTask;
 
         public InstaBot()
         {
@@ -66,7 +67,7 @@ namespace AveDiaryInstaBot
                  .SetRequestDelay(this.instaApiDelay)
                  .Build();
         }
-        private async Task<bool> Authenticate()
+        private async Task<bool> Login()
         {
             if (!this.instaApi.IsUserAuthenticated)
             {
@@ -97,7 +98,7 @@ namespace AveDiaryInstaBot
         }
         private async Task Authorize()
         {
-            bool isAuthorized = await Authenticate();
+            bool isAuthorized = await Login();
             if (isAuthorized)
                 SaveSession();
         }
@@ -176,10 +177,11 @@ namespace AveDiaryInstaBot
             this.dbContext.SaveChanges();
         }
 
-        public async Task StartPolling()
+        public void StartPolling()
         {
-            await Task.Run(async () =>
+            this.pollingTask = Task.Run(async () =>
             {
+                Console.WriteLine("Polling was started. Press Enter to stop.");
                 while (!this.isStopRequested)
                 {
                     ApprovePendingUsers();
@@ -187,22 +189,24 @@ namespace AveDiaryInstaBot
                     var messages = await this.instaApi.MessagingProcessor
                         .GetDirectInboxAsync(PaginationParameters.MaxPagesToLoad(1));
                     var threads = messages.Value.Inbox.Threads;
-                    foreach(var thread in threads)
+                    foreach (var thread in threads)
                     {
-                        foreach(var message in thread.Items)
+                        foreach (var message in thread.Items)
                         {
-                            if(message.UserId != BotId)
+                            if (message.UserId != BotId)
                                 ProcessMessage(message, thread.ThreadId);
                         }
                     }
 
                     Thread.Sleep(TimeSpan.FromSeconds(0.5));
                 }
+                Console.WriteLine("Polling was stoped.");
             });
         }
         public void StopPolling()
         {
             this.isStopRequested = true;
+            this.pollingTask.Wait();
         }
     }
 }
