@@ -206,6 +206,8 @@ namespace AveDiaryInstaBot
             this.botSettings.Commands.Help.ForEach(command => answer.Append($"{command}\n"));
             answer.Append("Login (Вхід):\n");
             this.botSettings.Commands.Login.ForEach(command => answer.Append($"{command}\n"));
+            answer.Append("Tomorrow H/W (Д/З на завтра):\n");
+            this.botSettings.Commands.TomorrowHomework.ForEach(command => answer.Append($"{command}\n"));
 
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer.ToString());
         }
