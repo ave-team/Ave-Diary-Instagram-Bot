@@ -135,7 +135,7 @@ namespace AveDiaryInstaBot
                 else if (IsCommand(message.Text, CommandType.AllHomework))
                     ProcessAllHomeworkCommand(threadId);
                 else
-                    this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, "Перепрошую, але я не розумію...");
+                    this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, this.botSettings.Answers.UnknownCommand);
             }
         }
         private bool IsCommand(string messageText, CommandType commandType)
@@ -165,18 +165,18 @@ namespace AveDiaryInstaBot
             bool isClassLoginExists = await this.diaryApi.IsClassLoginExists(classLogin);
             if (isClassLoginExists)
             {
-                if (await IsStudentExistsInDatabase(threadId))
+                if (IsStudentExistsInDatabase(threadId))
                     UpdateStudent(threadId, classLogin);
                 else
                     AddNewStudent(threadId, classLogin);
-                answer = "Я запам’ятала! Щоб змінити клас використайте повторно команду /login";
+                answer = this.botSettings.Answers.LoginSaved;
             }
             else
-                answer = $"Перепрошую, але класу із логіном {classLogin} не існує";
+                answer = this.botSettings.Answers.WrongLogin.Replace("{classLogin}", classLogin);
 
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
         }
-        private async Task<bool> IsStudentExistsInDatabase(string threadId)
+        private bool IsStudentExistsInDatabase(string threadId)
         {
             var student = this.dbContext.Students.FirstOrDefault(dbStudent => dbStudent.ThreadId == threadId);
             return student != null;
@@ -200,15 +200,16 @@ namespace AveDiaryInstaBot
         }
         private async void ProcessHelpCommand(string threadId)
         {
-            StringBuilder answer = new StringBuilder("Список ключевих слів для команд:\n");
-            answer.Append("Help (Допомога):\n");
-            this.botSettings.Commands.Help.ForEach(command => answer.Append($"{command}\n"));
-            answer.Append("Login (Вхід):\n");
-            this.botSettings.Commands.Login.ForEach(command => answer.Append($"{command}\n"));
-            answer.Append("Tomorrow H/W (Д/З на завтра):\n");
-            this.botSettings.Commands.TomorrowHomework.ForEach(command => answer.Append($"{command}\n"));
-            answer.Append("All H/W (Усе Д/З):\n");
-            this.botSettings.Commands.AllHomework.ForEach(command => answer.Append($"{command}\n"));
+            StringBuilder answer = new StringBuilder(this.botSettings.Answers.Help);
+            string[] replacementPhrases = { "{helpCommands}", "{loginCommands}", "{tomorrowHomeworkCommands}", "{allHomeworkCommands}" };
+            string[] commandProperties = { "Help", "Login", "TomorrowHomework", "AllHomework" };
+            for(int commandIndex = 0; commandIndex < commandProperties.Length; commandIndex++)
+            {
+                StringBuilder avialableCommands = new StringBuilder();
+                var propertyCommands = this.botSettings.Commands[commandProperties[commandIndex]] as List<string>;
+                propertyCommands.ForEach(command => avialableCommands.Append($"{command}\n"));
+                answer.Replace(replacementPhrases[commandIndex], avialableCommands.ToString());
+            }
 
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer.ToString());
         }
@@ -217,7 +218,7 @@ namespace AveDiaryInstaBot
             var dbStudent = this.dbContext.Students.SingleOrDefault(student => student.ThreadId == threadId);
             if (dbStudent == null)
             {
-                string answer = "Перепрошую, але я не знаю логін твого класу. Добав його командою: долучитися classLogin";
+                string answer = this.botSettings.Answers.EmptyLogin;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
             }
@@ -226,7 +227,7 @@ namespace AveDiaryInstaBot
             homework = homework.Replace("\\n", Environment.NewLine);
             if (string.IsNullOrWhiteSpace(homework))
             {
-                string answer = "На завтра нічого не задано!";
+                string answer = this.botSettings.Answers.EmptyTomorrowHomework;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
             }
@@ -238,7 +239,7 @@ namespace AveDiaryInstaBot
             var dbStudent = this.dbContext.Students.SingleOrDefault(student => student.ThreadId == threadId);
             if (dbStudent == null)
             {
-                string answer = "Перепрошую, але я не знаю логін твого класу. Добав його командою: долучитися classLogin";
+                string answer = this.botSettings.Answers.EmptyLogin;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
             }
@@ -247,7 +248,7 @@ namespace AveDiaryInstaBot
             homework = homework.Replace("\\n", Environment.NewLine);
             if (string.IsNullOrWhiteSpace(homework))
             {
-                string answer = "На завтра нічого не задано!";
+                string answer = this.botSettings.Answers.EmptyAllHomework;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
             }

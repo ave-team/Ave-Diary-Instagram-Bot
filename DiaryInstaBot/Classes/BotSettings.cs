@@ -9,6 +9,7 @@ namespace DiaryInstaBot.Classes
     {
         public UserSessionData LoginData { get; set; }
         public BotCommands Commands { get; set; }
+        public BotAnswers Answers { get; set; }
         public string ConnectionString { get; set; }
     }
 }
