@@ -134,6 +134,8 @@ namespace AveDiaryInstaBot
                     ProcessTomorrowHomeworkCommand(threadId);
                 else if (IsCommand(message.Text, CommandType.AllHomework))
                     ProcessAllHomeworkCommand(threadId);
+                else
+                    this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, "Перепрошую, але я не розумію...");
             }
         }
         private bool IsCommand(string messageText, CommandType commandType)
@@ -163,7 +165,7 @@ namespace AveDiaryInstaBot
             bool isClassLoginExists = await this.diaryApi.IsClassLoginExists(classLogin);
             if (isClassLoginExists)
             {
-                if (IsStudentExistsInDatabase(threadId))
+                if (await IsStudentExistsInDatabase(threadId))
                     UpdateStudent(threadId, classLogin);
                 else
                     AddNewStudent(threadId, classLogin);
@@ -174,9 +176,9 @@ namespace AveDiaryInstaBot
 
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
         }
-        private bool IsStudentExistsInDatabase(string threadId)
+        private async Task<bool> IsStudentExistsInDatabase(string threadId)
         {
-            var student = this.dbContext.Students.SingleOrDefault(dbStudent => dbStudent.ThreadId == threadId);
+            var student = this.dbContext.Students.FirstOrDefault(dbStudent => dbStudent.ThreadId == threadId);
             return student != null;
         }
         private void AddNewStudent(string threadId, string classLogin)
