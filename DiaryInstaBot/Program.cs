@@ -10,11 +10,19 @@ namespace DiaryInstaBot
         {
             Console.OutputEncoding = Encoding.UTF8;
 
-            InstaBot bot = new InstaBot();
-            bot.StartPolling();
+            try
+            { 
+                InstaBot bot = new InstaBot();
+                bot.StartPolling();
 
-            Console.ReadLine();
-            bot.StopPolling();
+                Console.ReadLine();
+                bot.StopPolling();
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine($"{ex.Message}\nGlobal handler.");
+                Environment.Exit(1);
+            }
         }
     }
 }
