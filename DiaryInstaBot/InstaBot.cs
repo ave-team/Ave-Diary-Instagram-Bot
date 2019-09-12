@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -80,13 +81,146 @@ namespace AveDiaryInstaBot
 
                 if (!logInResult.Succeeded)
                 {
-                    Console.WriteLine($"Unable to login: {logInResult.Info.Message}");
-                    return false;
+                    if (logInResult.Value == InstaLoginResult.ChallengeRequired)
+                    {
+                        var challenge = await instaApi.GetChallengeRequireVerifyMethodAsync();
+                        if (challenge.Succeeded)
+                        {
+                            if (challenge.Value.SubmitPhoneRequired)
+                            {
+                                await ProcessPhoneNumberChallenge();
+                            }
+                            else
+                            {
+                                if (challenge.Value.StepData != null)
+                                {
+                                    await SelectPhoneChallenge();
+                                }
+                            }
+                        }
+                        else
+                            Console.WriteLine($"ERROR: {challenge.Info.Message}");
+                    }
+                    else if (logInResult.Value == InstaLoginResult.TwoFactorRequired)
+                    {
+                        await ProcessTwoFactorAuth();
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Unable to login: {logInResult.Info.Message}\nTry enable Two Factor Auth.");
+                        return false;
+                    }
+
                 }
 
                 Console.WriteLine("Successfully authorized!");
             }
+            
             return true;
+        }
+        private async Task SelectPhoneChallenge()
+        {
+            var phoneNumber = await instaApi.RequestVerifyCodeToSMSForChallengeRequireAsync();
+            if (phoneNumber.Succeeded)
+            {
+                Console.WriteLine($"We sent verify code to this phone number(it's end with this):\n{phoneNumber.Value.StepData.ContactPoint}");
+                Console.WriteLine("Enter code, that you got:");
+                var code = Console.ReadLine();
+                await VerifyCode(code);
+            }
+            else
+                Console.WriteLine($"ERROR: {phoneNumber.Info.Message}");
+        }
+        private async Task ProcessTwoFactorAuth()
+        {
+            Console.WriteLine("Detected Two Factor Auth. Please, enter your two factor code:");
+            var authCode = Console.ReadLine();
+            var twoFactorLogin = await instaApi.TwoFactorLoginAsync(authCode);
+
+            if (!twoFactorLogin.Succeeded)
+            {
+                SaveSession();
+            }
+            else
+            {
+                Console.WriteLine("Can't login. May be you entered expired code?");
+            }
+        }
+        private async Task ProcessPhoneNumberChallenge()
+        {
+            Console.Write("Enter mobile phone for challenge\n(Example +380951234568): ");
+            var enteredPhoneNumber = Console.ReadLine();
+            try
+            {
+                if (string.IsNullOrWhiteSpace(enteredPhoneNumber))
+                {
+                    Console.WriteLine("Please type a valid phone number(with country code).\r\ni.e: +380951234568");
+                    return;
+                }
+                var phoneNumber = enteredPhoneNumber;
+                if (!phoneNumber.StartsWith("+"))
+                    phoneNumber = $"+{phoneNumber}";
+
+                var submitPhone = await instaApi.SubmitPhoneNumberForChallengeRequireAsync(phoneNumber);
+                if (submitPhone.Succeeded)
+                {
+                    Console.WriteLine("Enter code, that you got:");
+                    var code = Console.ReadLine();
+                    await VerifyCode(code);
+                }
+                else
+                    Console.WriteLine($"ERROR: {submitPhone.Info.Message}");
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: {ex.Message}");
+            }
+        }
+        private async Task VerifyCode(string code)
+        {
+            code = code.Trim();
+            code = code.Replace(" ", "");
+            var regex = new Regex(@"^-*[0-9,\.]+$");
+            if (!regex.IsMatch(code))
+            {
+                Console.WriteLine("Verification code is numeric!");
+                return;
+            }
+            if (code.Length != 6)
+            {
+                Console.WriteLine("Verification code must be 6 digits!");
+                return;
+            }
+            try
+            {
+                // Note: calling VerifyCodeForChallengeRequireAsync function, 
+                // if user has two factor enabled, will wait 15 seconds and it will try to
+                // call LoginAsync.
+
+                var verifyLogin = await instaApi.VerifyCodeForChallengeRequireAsync(code);
+                if (verifyLogin.Succeeded)
+                {
+                    // you are logged in sucessfully.
+                    // Save session
+                    SaveSession();
+                }
+                else
+                {
+                    // two factor is required
+                    if (verifyLogin.Value == InstaLoginResult.TwoFactorRequired)
+                    {
+                        await ProcessTwoFactorAuth();
+                    }
+                    else
+                        Console.WriteLine($"ERROR: {verifyLogin.Info.Message}");
+                }
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: {ex.Message}");
+            }
         }
         private void SaveSession(string stateFile = "state.bin")
         {
@@ -105,7 +239,7 @@ namespace AveDiaryInstaBot
             else
             {
                 Console.WriteLine("FAILED TO LOG IN");
-                Environment.Exit(1);
+                throw new Exception("TEST EXP");
             }
         }
         private async void ApprovePendingUsers()
