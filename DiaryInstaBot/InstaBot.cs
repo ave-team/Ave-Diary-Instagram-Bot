@@ -7,6 +7,7 @@ using InstagramApiSharp.API;
 using InstagramApiSharp.API.Builder;
 using InstagramApiSharp.Classes;
 using InstagramApiSharp.Classes.Models;
+using InstagramApiSharp.Classes.SessionHandlers;
 using InstagramApiSharp.Logger;
 using Newtonsoft.Json;
 using System;
@@ -23,6 +24,7 @@ namespace AveDiaryInstaBot
     public class InstaBot
     {
         private const long BotId = 17389287231;
+        private const string SessionFilename = "Session.bin";
 
         private IInstaApi instaApi;
         private IRequestDelay instaApiDelay;
@@ -31,6 +33,7 @@ namespace AveDiaryInstaBot
         private DatabaseContext dbContext = new DatabaseContext();
         private DiaryApiHelper diaryApi = new DiaryApiHelper();
         private Task pollingTask;
+        private Logger logger;
 
         public InstaBot()
         {
@@ -38,6 +41,8 @@ namespace AveDiaryInstaBot
             {
                 string json = reader.ReadToEnd();
                 this.botSettings = JsonConvert.DeserializeObject<BotSettings>(json);
+                this.logger = new Logger(this.botSettings.LogFileName);
+                this.logger.Write(LogType.Info, "InstaBot() ctor — Bot settings successfully read;");
             }
 
             ConnectToDb();
@@ -46,33 +51,75 @@ namespace AveDiaryInstaBot
         }
         private void ConnectToDb()
         {
+            this.logger.Write(LogType.Info, $"InstaBot.ConnectToDb() — Trying connect to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
             try
             {
                 this.dbContext.Database.EnsureCreated();
+                this.logger.Write(LogType.Info, $"InstaBot.ConnectToDb() — Successfully connected to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
             }
             catch (AggregateException ex)
             {
-                Console.WriteLine("Unable to connect to Database. Check is it running now or verify connection string");
-                Console.WriteLine("Additional error data:\n");
-                Console.WriteLine($"Error message: {ex.Message}");
-                Console.WriteLine($"Error trace: {ex.StackTrace}");
-                Console.WriteLine($"Error innerException: {ex.InnerException}");
+                var errorBuilder = new StringBuilder("Unable to connect to Database. Check is it running now or verify connection string");
+                errorBuilder.Append("Additional error data:\n");
+                errorBuilder.Append($"Error message: {ex.Message}");
+                errorBuilder.Append($"Error trace: {ex.StackTrace}");
+                errorBuilder.Append($"Error innerException: {ex.InnerException}");
+                Console.WriteLine(errorBuilder.ToString());
+                this.logger.Write(LogType.Error, $"InstaBot.ConnectToDb() — Can't connect to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
+                this.logger.Write(LogType.Error, $"InstaBot.ConnectToDb() — Error info:\n {errorBuilder.ToString()};");
                 Environment.Exit(1);
             }
         }
         private void InitializeInstaApi()
         {
-            this.instaApiDelay = RequestDelay.FromSeconds(2, 2);
-            this.instaApi = InstaApiBuilder.CreateBuilder()
-                 .SetUser(this.botSettings.LoginData)
-                 .UseLogger(new DebugLogger(LogLevel.Exceptions))
-                 .SetRequestDelay(this.instaApiDelay)
-                 .Build();
+            this.logger.Write(LogType.Info, "InstaBot.InitializeInstaApi() — Trying initialize private instagram api;");
+            try
+            {
+                this.instaApiDelay = RequestDelay.FromSeconds(2, 2);
+                this.instaApi = InstaApiBuilder.CreateBuilder()
+                     .SetUser(this.botSettings.LoginData)
+                     .UseLogger(new DebugLogger(LogLevel.Exceptions))
+                     .SetRequestDelay(this.instaApiDelay)
+                     .SetSessionHandler(new FileSessionHandler() { FilePath = SessionFilename })
+                     .Build();
+                this.logger.Write(LogType.Info, "InstaBot.InitializeInstaApi() — Private instagram api successfully initialized;");
+            }
+            catch(Exception ex)
+            {
+                var errorBuilder = new StringBuilder("Unable to inialize instagram api.");
+                errorBuilder.Append("Additional error data:\n");
+                errorBuilder.Append($"Error message: {ex.Message}");
+                errorBuilder.Append($"Error trace: {ex.StackTrace}");
+                errorBuilder.Append($"Error innerException: {ex.InnerException}");
+                Console.WriteLine(errorBuilder.ToString());
+                this.logger.Write(LogType.Error, "InstaBot.InitializeInstaApi() — Failed to initialize private instagram api;");
+                this.logger.Write(LogType.Error, $"InstaBot.InitializeInstaApi() — Error info:\n {errorBuilder.ToString()}");
+                Environment.Exit(1);
+            }
+        }
+        private async Task Authorize()
+        {
+            this.logger.Write(LogType.Info, "InstaBot.Authorize() — Trying to auth in bot account;");
+            bool isAuthorized = await Login();
+            if (isAuthorized)
+            {
+                SaveSession();
+            }
+            else
+            {
+                Console.WriteLine("FAILED TO LOG IN");
+                this.logger.Write(LogType.Error, "InstaBot.Authorize() — Failed to log in;");
+            }
         }
         private async Task<bool> Login()
         {
+            this.logger.Write(LogType.Info, "InstaBot.Login() — Trying to load previous session;");
+            if(File.Exists(Path.Combine(Directory.GetCurrentDirectory(), SessionFilename)))
+                LoadSession();
+
             if (!this.instaApi.IsUserAuthenticated)
             {
+                this.logger.Write(LogType.Info, $"InstaBot.Login() — Logging in as @{botSettings.LoginData.UserName};");
                 Console.WriteLine($"Logging in as @{botSettings.LoginData.UserName}");
 
                 this.instaApiDelay.Disable();
@@ -83,77 +130,63 @@ namespace AveDiaryInstaBot
                 {
                     if (logInResult.Value == InstaLoginResult.ChallengeRequired)
                     {
+                        this.logger.Write(LogType.Info, "InstaBot.Login() — Challenge is required;");
+                        this.logger.Write(LogType.Info, "InstaBot.Login() — Getting challenge verify method;");
                         var challenge = await instaApi.GetChallengeRequireVerifyMethodAsync();
                         if (challenge.Succeeded)
                         {
+                            this.logger.Write(LogType.Info, "InstaBot.Login() — Got challenge verify method;");
                             if (challenge.Value.SubmitPhoneRequired)
                             {
+                                this.logger.Write(LogType.Info, "InstaBot.Login() — Is SubmitPhoneRequired challenge. Starting process prone number challenge;");
                                 await ProcessPhoneNumberChallenge();
                             }
                             else
                             {
+                                this.logger.Write(LogType.Info, "InstaBot.Login() — Instagram requested select challenge type;");
                                 if (challenge.Value.StepData != null)
                                 {
+                                    this.logger.Write(LogType.Info, "InstaBot.Login() — Trying to select phone challenge;");
                                     await SelectPhoneChallenge();
                                 }
                             }
                         }
                         else
+                        {
                             Console.WriteLine($"ERROR: {challenge.Info.Message}");
+                            this.logger.Write(LogType.Error, "InstaBot.Login() — Can't get challenge;");
+                        }
                     }
                     else if (logInResult.Value == InstaLoginResult.TwoFactorRequired)
                     {
+                        this.logger.Write(LogType.Info, "InstaBot.Login() — Requested two factor auth;");
                         await ProcessTwoFactorAuth();
                     }
                     else
                     {
                         Console.WriteLine($"Unable to login: {logInResult.Info.Message}\nTry enable Two Factor Auth.");
+                        this.logger.Write(LogType.Error, $"InstaBot.Login() — Unable to login: {logInResult.Info.Message};");
+                        
                         return false;
                     }
 
                 }
-
-                Console.WriteLine("Successfully authorized!");
             }
-            
+            this.logger.Write(LogType.Info, "InstaBot.Login() — Successfully authorized;");
+            Console.WriteLine("Successfully authorized!");
             return true;
-        }
-        private async Task SelectPhoneChallenge()
-        {
-            var phoneNumber = await instaApi.RequestVerifyCodeToSMSForChallengeRequireAsync();
-            if (phoneNumber.Succeeded)
-            {
-                Console.WriteLine($"We sent verify code to this phone number(it's end with this):\n{phoneNumber.Value.StepData.ContactPoint}");
-                Console.WriteLine("Enter code, that you got:");
-                var code = Console.ReadLine();
-                await VerifyCode(code);
-            }
-            else
-                Console.WriteLine($"ERROR: {phoneNumber.Info.Message}");
-        }
-        private async Task ProcessTwoFactorAuth()
-        {
-            Console.WriteLine("Detected Two Factor Auth. Please, enter your two factor code:");
-            var authCode = Console.ReadLine();
-            var twoFactorLogin = await instaApi.TwoFactorLoginAsync(authCode);
-
-            if (!twoFactorLogin.Succeeded)
-            {
-                SaveSession();
-            }
-            else
-            {
-                Console.WriteLine("Can't login. May be you entered expired code?");
-            }
         }
         private async Task ProcessPhoneNumberChallenge()
         {
+            this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Waiting entering phone number;");
             Console.Write("Enter mobile phone for challenge\n(Example +380951234568): ");
             var enteredPhoneNumber = Console.ReadLine();
+            this.logger.Write(LogType.Info, $"InstaBot.ProcessPhoneNumberChallenge() — Entered number: '{enteredPhoneNumber}';");
             try
             {
                 if (string.IsNullOrWhiteSpace(enteredPhoneNumber))
                 {
+                    this.logger.Write(LogType.Error, "InstaBot.ProcessPhoneNumberChallenge() — Entered number is not valid;");
                     Console.WriteLine("Please type a valid phone number(with country code).\r\ni.e: +380951234568");
                     return;
                 }
@@ -161,35 +194,47 @@ namespace AveDiaryInstaBot
                 if (!phoneNumber.StartsWith("+"))
                     phoneNumber = $"+{phoneNumber}";
 
+                this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Submitting phone number for challenge;");
                 var submitPhone = await instaApi.SubmitPhoneNumberForChallengeRequireAsync(phoneNumber);
                 if (submitPhone.Succeeded)
                 {
-                    Console.WriteLine("Enter code, that you got:");
+                    this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Requesting SMS code;");
+                    Console.Write("Enter code, that you got: ");
                     var code = Console.ReadLine();
+
+                    this.logger.Write(LogType.Info, $"InstaBot.ProcessPhoneNumberChallenge() — Entered code: '{code}';");
+                    this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Starting verifying code;");
                     await VerifyCode(code);
                 }
                 else
+                {
                     Console.WriteLine($"ERROR: {submitPhone.Info.Message}");
+                    this.logger.Write(LogType.Error, $"InstaBot.ProcessPhoneNumberChallenge() — Wrong phone number.\nError message:\n{submitPhone.Info.Message};");
+                }
 
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: {ex.Message}");
+                this.logger.Write(LogType.Error, $"InstaBot.ProcessPhoneNumberChallenge() — Error details:\n{ex.Message}\n{ex.StackTrace}\n{ex.InnerException};");
             }
         }
         private async Task VerifyCode(string code)
         {
+            this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Trimming verification code;");
             code = code.Trim();
             code = code.Replace(" ", "");
             var regex = new Regex(@"^-*[0-9,\.]+$");
             if (!regex.IsMatch(code))
             {
                 Console.WriteLine("Verification code is numeric!");
+                this.logger.Write(LogType.Error, "InstaBot.VerifyCode() — Entered verification code is not valid (Verification code must be numeric!);");
                 return;
             }
             if (code.Length != 6)
             {
                 Console.WriteLine("Verification code must be 6 digits!");
+                this.logger.Write(LogType.Error, "InstaBot.VerifyCode() — Entered verification code is not valid (Verification code must be 6 digits!);");
                 return;
             }
             try
@@ -198,11 +243,11 @@ namespace AveDiaryInstaBot
                 // if user has two factor enabled, will wait 15 seconds and it will try to
                 // call LoginAsync.
 
+                this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Verification code sent;");
                 var verifyLogin = await instaApi.VerifyCodeForChallengeRequireAsync(code);
                 if (verifyLogin.Succeeded)
                 {
-                    // you are logged in sucessfully.
-                    // Save session
+                    this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Verification code is valid. Challenge complete;");
                     SaveSession();
                 }
                 else
@@ -210,38 +255,79 @@ namespace AveDiaryInstaBot
                     // two factor is required
                     if (verifyLogin.Value == InstaLoginResult.TwoFactorRequired)
                     {
+                        this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Requested two factor auth;");
                         await ProcessTwoFactorAuth();
                     }
                     else
+                    {
                         Console.WriteLine($"ERROR: {verifyLogin.Info.Message}");
+                        this.logger.Write(LogType.Error, $"InstaBot.VerifyCode() — Error details:\n{verifyLogin.Info.Message};");
+                    }
                 }
 
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: {ex.Message}");
+                this.logger.Write(LogType.Error, $"InstaBot.VerifyCode() — Error details:\n{ex.Message}\n{ex.StackTrace}\n{ex.InnerException};");
             }
         }
-        private void SaveSession(string stateFile = "state.bin")
+        private async Task SelectPhoneChallenge()
         {
-            var state = instaApi.GetStateDataAsStream();
-            using (var fileStream = File.Create(stateFile))
+            this.logger.Write(LogType.Info, "InstaBot.SelectPhoneChallenge() — Requesting SMS Challenge;");
+            var phoneNumber = await instaApi.RequestVerifyCodeToSMSForChallengeRequireAsync();
+            if (phoneNumber.Succeeded)
             {
-                state.Seek(0, SeekOrigin.Begin);
-                state.CopyTo(fileStream);
+                this.logger.Write(LogType.Info, "InstaBot.SelectPhoneChallenge() — SMS code sent;");
+                Console.WriteLine($"We sent verify code to this phone number(it's end with this): {phoneNumber.Value.StepData.ContactPoint}");
+                Console.Write("Enter code, that you got: ");
+                var code = Console.ReadLine();
+
+                this.logger.Write(LogType.Info, $"InstaBot.SelectPhoneChallenge() — Entered code: '{code}';");
+                this.logger.Write(LogType.Info, "InstaBot.SelectPhoneChallenge() — Starting verifying code;");
+                await VerifyCode(code);
             }
-        }
-        private async Task Authorize()
-        {
-            bool isAuthorized = await Login();
-            if (isAuthorized)
-                SaveSession();
             else
             {
-                Console.WriteLine("FAILED TO LOG IN");
-                throw new Exception("TEST EXP");
+                Console.WriteLine($"ERROR: {phoneNumber.Info.Message}");
+                this.logger.Write(LogType.Error, $"InstaBot.SelectPhoneChallenge() — Error message:\n{phoneNumber.Info.Message};");
             }
         }
+        private async Task ProcessTwoFactorAuth()
+        {
+            this.logger.Write(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Entering two factor code;");
+            Console.WriteLine("Detected Two Factor Auth. Please, enter your two factor code:");
+            var authCode = Console.ReadLine();
+
+            this.logger.Write(LogType.Info, $"InstaBot.ProcessTwoFactorAuth() — Entered code: '{authCode}';");
+            this.logger.Write(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Sending code for verification;");
+            var twoFactorLogin = await instaApi.TwoFactorLoginAsync(authCode);
+
+            if (twoFactorLogin.Succeeded)
+            {
+                this.logger.Write(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Success, two factor auth passed;");
+                SaveSession();
+            }
+            else
+            {
+                Console.WriteLine("Can't login. May be you entered expired code?");
+                this.logger.Write(LogType.Error, "InstaBot.ProcessTwoFactorAuth() — Two factor code denied;");
+            }
+        }
+        private void SaveSession(string stateFile = SessionFilename)
+        {
+            if (this.instaApi == null)
+                return;
+            if (!this.instaApi.IsUserAuthenticated)
+                return;
+            this.instaApi.SessionHandler.Save();
+            this.logger.Write(LogType.Info, "InstaBot.SaveSession() — Session saved;");
+        }
+        private void LoadSession()
+        {
+            this.instaApi?.SessionHandler?.Load();
+        }
+        
         private async void ApprovePendingUsers()
         {
             var pendingUsers = await this.instaApi.MessagingProcessor
