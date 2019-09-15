@@ -3,13 +3,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace DiaryInstaBot
 {
     public class Logger
     {
         private string logFilePath;
-        private StreamWriter logStreamWriter;
+        //private StreamWriter logStreamWriter;
+        private FileStream logFileStream;
 
         public Logger(string logFileName)
         {
@@ -24,17 +26,19 @@ namespace DiaryInstaBot
             {
                 var fileStream = File.Create(logFile);
                 fileStream.Close();
+
                 this.logFilePath = logFile;
-                this.logStreamWriter = new StreamWriter(logFile, true, Encoding.UTF8);
-                this.logStreamWriter.AutoFlush = true;
+                 
             }
         }
 
-        public void Write(LogType type, string message)
+        public async Task WriteAsync(LogType type, string message)
         {
             var now = DateTime.Now;
             string logMessage = $"{now.ToLongTimeString()} - {type.ToString().ToUpper()}: {message}";
-            this.logStreamWriter.WriteLine(logMessage);
+            using (var fs = new FileStream(this.logFilePath, FileMode.Append, FileAccess.Write, FileShare.None, 4096, true))
+                using(var writer = new StreamWriter(fs))
+                    await writer.WriteLineAsync(logMessage);
         }
     }
 }

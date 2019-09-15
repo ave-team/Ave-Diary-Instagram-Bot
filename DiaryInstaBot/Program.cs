@@ -21,6 +21,8 @@ namespace DiaryInstaBot
             catch(Exception ex)
             {
                 Console.WriteLine($"{ex.Message}\nGlobal handler.");
+                Console.WriteLine($"{ex.InnerException}\nGlobal handler.");
+                Console.WriteLine($"{ex.StackTrace}\nGlobal handler.");
                 Environment.Exit(1);
             }
         }

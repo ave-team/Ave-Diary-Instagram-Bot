@@ -24,6 +24,7 @@ namespace AveDiaryInstaBot
     public class InstaBot
     {
         private const long BotId = 17389287231;
+        private const string BotUsername = "avediarybot";
         private const string SessionFilename = "Session.bin";
 
         private IInstaApi instaApi;
@@ -42,20 +43,19 @@ namespace AveDiaryInstaBot
                 string json = reader.ReadToEnd();
                 this.botSettings = JsonConvert.DeserializeObject<BotSettings>(json);
                 this.logger = new Logger(this.botSettings.LogFileName);
-                this.logger.Write(LogType.Info, "InstaBot() ctor — Bot settings successfully read;");
             }
 
             ConnectToDb();
             InitializeInstaApi();
             Authorize().Wait();
         }
-        private void ConnectToDb()
+        private async void ConnectToDb()
         {
-            this.logger.Write(LogType.Info, $"InstaBot.ConnectToDb() — Trying connect to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ConnectToDb() — Trying connect to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
             try
             {
                 this.dbContext.Database.EnsureCreated();
-                this.logger.Write(LogType.Info, $"InstaBot.ConnectToDb() — Successfully connected to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.ConnectToDb() — Successfully connected to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
             }
             catch (AggregateException ex)
             {
@@ -65,14 +65,14 @@ namespace AveDiaryInstaBot
                 errorBuilder.Append($"Error trace: {ex.StackTrace}");
                 errorBuilder.Append($"Error innerException: {ex.InnerException}");
                 Console.WriteLine(errorBuilder.ToString());
-                this.logger.Write(LogType.Error, $"InstaBot.ConnectToDb() — Can't connect to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
-                this.logger.Write(LogType.Error, $"InstaBot.ConnectToDb() — Error info:\n {errorBuilder.ToString()};");
+                await this.logger.WriteAsync(LogType.Error, $"InstaBot.ConnectToDb() — Can't connect to DB (ConnectionString=\"{this.botSettings.ConnectionString}\");");
+                await this.logger.WriteAsync(LogType.Error, $"InstaBot.ConnectToDb() — Error info:\n {errorBuilder.ToString()};");
                 Environment.Exit(1);
             }
         }
-        private void InitializeInstaApi()
+        private async void InitializeInstaApi()
         {
-            this.logger.Write(LogType.Info, "InstaBot.InitializeInstaApi() — Trying initialize private instagram api;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.InitializeInstaApi() — Trying initialize private instagram api;");
             try
             {
                 this.instaApiDelay = RequestDelay.FromSeconds(2, 2);
@@ -82,7 +82,7 @@ namespace AveDiaryInstaBot
                      .SetRequestDelay(this.instaApiDelay)
                      .SetSessionHandler(new FileSessionHandler() { FilePath = SessionFilename })
                      .Build();
-                this.logger.Write(LogType.Info, "InstaBot.InitializeInstaApi() — Private instagram api successfully initialized;");
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.InitializeInstaApi() — Private instagram api successfully initialized;");
             }
             catch(Exception ex)
             {
@@ -92,14 +92,14 @@ namespace AveDiaryInstaBot
                 errorBuilder.Append($"Error trace: {ex.StackTrace}");
                 errorBuilder.Append($"Error innerException: {ex.InnerException}");
                 Console.WriteLine(errorBuilder.ToString());
-                this.logger.Write(LogType.Error, "InstaBot.InitializeInstaApi() — Failed to initialize private instagram api;");
-                this.logger.Write(LogType.Error, $"InstaBot.InitializeInstaApi() — Error info:\n {errorBuilder.ToString()}");
+                await this.logger.WriteAsync(LogType.Error, "InstaBot.InitializeInstaApi() — Failed to initialize private instagram api;");
+                await this.logger.WriteAsync(LogType.Error, $"InstaBot.InitializeInstaApi() — Error info:\n {errorBuilder.ToString()}");
                 Environment.Exit(1);
             }
         }
         private async Task Authorize()
         {
-            this.logger.Write(LogType.Info, "InstaBot.Authorize() — Trying to auth in bot account;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.Authorize() — Trying to auth in bot account;");
             bool isAuthorized = await Login();
             if (isAuthorized)
             {
@@ -108,18 +108,18 @@ namespace AveDiaryInstaBot
             else
             {
                 Console.WriteLine("FAILED TO LOG IN");
-                this.logger.Write(LogType.Error, "InstaBot.Authorize() — Failed to log in;");
+                await this.logger.WriteAsync(LogType.Error, "InstaBot.Authorize() — Failed to log in;");
             }
         }
         private async Task<bool> Login()
         {
-            this.logger.Write(LogType.Info, "InstaBot.Login() — Trying to load previous session;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Trying to load previous session;");
             if(File.Exists(Path.Combine(Directory.GetCurrentDirectory(), SessionFilename)))
                 LoadSession();
 
             if (!this.instaApi.IsUserAuthenticated)
             {
-                this.logger.Write(LogType.Info, $"InstaBot.Login() — Logging in as @{botSettings.LoginData.UserName};");
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.Login() — Logging in as @{botSettings.LoginData.UserName};");
                 Console.WriteLine($"Logging in as @{botSettings.LoginData.UserName}");
 
                 this.instaApiDelay.Disable();
@@ -130,23 +130,23 @@ namespace AveDiaryInstaBot
                 {
                     if (logInResult.Value == InstaLoginResult.ChallengeRequired)
                     {
-                        this.logger.Write(LogType.Info, "InstaBot.Login() — Challenge is required;");
-                        this.logger.Write(LogType.Info, "InstaBot.Login() — Getting challenge verify method;");
+                        await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Challenge is required;");
+                        await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Getting challenge verify method;");
                         var challenge = await instaApi.GetChallengeRequireVerifyMethodAsync();
                         if (challenge.Succeeded)
                         {
-                            this.logger.Write(LogType.Info, "InstaBot.Login() — Got challenge verify method;");
+                            await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Got challenge verify method;");
                             if (challenge.Value.SubmitPhoneRequired)
                             {
-                                this.logger.Write(LogType.Info, "InstaBot.Login() — Is SubmitPhoneRequired challenge. Starting process prone number challenge;");
+                                await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Is SubmitPhoneRequired challenge. Starting process prone number challenge;");
                                 await ProcessPhoneNumberChallenge();
                             }
                             else
                             {
-                                this.logger.Write(LogType.Info, "InstaBot.Login() — Instagram requested select challenge type;");
+                                await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Instagram requested select challenge type;");
                                 if (challenge.Value.StepData != null)
                                 {
-                                    this.logger.Write(LogType.Info, "InstaBot.Login() — Trying to select phone challenge;");
+                                    await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Trying to select phone challenge;");
                                     await SelectPhoneChallenge();
                                 }
                             }
@@ -154,39 +154,39 @@ namespace AveDiaryInstaBot
                         else
                         {
                             Console.WriteLine($"ERROR: {challenge.Info.Message}");
-                            this.logger.Write(LogType.Error, "InstaBot.Login() — Can't get challenge;");
+                            await this.logger.WriteAsync(LogType.Error, "InstaBot.Login() — Can't get challenge;");
                         }
                     }
                     else if (logInResult.Value == InstaLoginResult.TwoFactorRequired)
                     {
-                        this.logger.Write(LogType.Info, "InstaBot.Login() — Requested two factor auth;");
+                        await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Requested two factor auth;");
                         await ProcessTwoFactorAuth();
                     }
                     else
                     {
                         Console.WriteLine($"Unable to login: {logInResult.Info.Message}\nTry enable Two Factor Auth.");
-                        this.logger.Write(LogType.Error, $"InstaBot.Login() — Unable to login: {logInResult.Info.Message};");
+                        await this.logger.WriteAsync(LogType.Error, $"InstaBot.Login() — Unable to login: {logInResult.Info.Message};");
                         
                         return false;
                     }
 
                 }
             }
-            this.logger.Write(LogType.Info, "InstaBot.Login() — Successfully authorized;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.Login() — Successfully authorized;");
             Console.WriteLine("Successfully authorized!");
             return true;
         }
         private async Task ProcessPhoneNumberChallenge()
         {
-            this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Waiting entering phone number;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Waiting entering phone number;");
             Console.Write("Enter mobile phone for challenge\n(Example +380951234568): ");
             var enteredPhoneNumber = Console.ReadLine();
-            this.logger.Write(LogType.Info, $"InstaBot.ProcessPhoneNumberChallenge() — Entered number: '{enteredPhoneNumber}';");
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessPhoneNumberChallenge() — Entered number: '{enteredPhoneNumber}';");
             try
             {
                 if (string.IsNullOrWhiteSpace(enteredPhoneNumber))
                 {
-                    this.logger.Write(LogType.Error, "InstaBot.ProcessPhoneNumberChallenge() — Entered number is not valid;");
+                    await this.logger.WriteAsync(LogType.Error, "InstaBot.ProcessPhoneNumberChallenge() — Entered number is not valid;");
                     Console.WriteLine("Please type a valid phone number(with country code).\r\ni.e: +380951234568");
                     return;
                 }
@@ -194,47 +194,47 @@ namespace AveDiaryInstaBot
                 if (!phoneNumber.StartsWith("+"))
                     phoneNumber = $"+{phoneNumber}";
 
-                this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Submitting phone number for challenge;");
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Submitting phone number for challenge;");
                 var submitPhone = await instaApi.SubmitPhoneNumberForChallengeRequireAsync(phoneNumber);
                 if (submitPhone.Succeeded)
                 {
-                    this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Requesting SMS code;");
+                    await this.logger.WriteAsync(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Requesting SMS code;");
                     Console.Write("Enter code, that you got: ");
                     var code = Console.ReadLine();
 
-                    this.logger.Write(LogType.Info, $"InstaBot.ProcessPhoneNumberChallenge() — Entered code: '{code}';");
-                    this.logger.Write(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Starting verifying code;");
+                    await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessPhoneNumberChallenge() — Entered code: '{code}';");
+                    await this.logger.WriteAsync(LogType.Info, "InstaBot.ProcessPhoneNumberChallenge() — Starting verifying code;");
                     await VerifyCode(code);
                 }
                 else
                 {
                     Console.WriteLine($"ERROR: {submitPhone.Info.Message}");
-                    this.logger.Write(LogType.Error, $"InstaBot.ProcessPhoneNumberChallenge() — Wrong phone number.\nError message:\n{submitPhone.Info.Message};");
+                    await this.logger.WriteAsync(LogType.Error, $"InstaBot.ProcessPhoneNumberChallenge() — Wrong phone number.\nError message:\n{submitPhone.Info.Message};");
                 }
 
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: {ex.Message}");
-                this.logger.Write(LogType.Error, $"InstaBot.ProcessPhoneNumberChallenge() — Error details:\n{ex.Message}\n{ex.StackTrace}\n{ex.InnerException};");
+                await this.logger.WriteAsync(LogType.Error, $"InstaBot.ProcessPhoneNumberChallenge() — Error details:\n{ex.Message}\n{ex.StackTrace}\n{ex.InnerException};");
             }
         }
         private async Task VerifyCode(string code)
         {
-            this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Trimming verification code;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.VerifyCode() — Trimming verification code;");
             code = code.Trim();
             code = code.Replace(" ", "");
             var regex = new Regex(@"^-*[0-9,\.]+$");
             if (!regex.IsMatch(code))
             {
                 Console.WriteLine("Verification code is numeric!");
-                this.logger.Write(LogType.Error, "InstaBot.VerifyCode() — Entered verification code is not valid (Verification code must be numeric!);");
+                await this.logger.WriteAsync(LogType.Error, "InstaBot.VerifyCode() — Entered verification code is not valid (Verification code must be numeric!);");
                 return;
             }
             if (code.Length != 6)
             {
                 Console.WriteLine("Verification code must be 6 digits!");
-                this.logger.Write(LogType.Error, "InstaBot.VerifyCode() — Entered verification code is not valid (Verification code must be 6 digits!);");
+                await this.logger.WriteAsync(LogType.Error, "InstaBot.VerifyCode() — Entered verification code is not valid (Verification code must be 6 digits!);");
                 return;
             }
             try
@@ -243,11 +243,11 @@ namespace AveDiaryInstaBot
                 // if user has two factor enabled, will wait 15 seconds and it will try to
                 // call LoginAsync.
 
-                this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Verification code sent;");
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.VerifyCode() — Verification code sent;");
                 var verifyLogin = await instaApi.VerifyCodeForChallengeRequireAsync(code);
                 if (verifyLogin.Succeeded)
                 {
-                    this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Verification code is valid. Challenge complete;");
+                    await this.logger.WriteAsync(LogType.Info, "InstaBot.VerifyCode() — Verification code is valid. Challenge complete;");
                     SaveSession();
                 }
                 else
@@ -255,13 +255,13 @@ namespace AveDiaryInstaBot
                     // two factor is required
                     if (verifyLogin.Value == InstaLoginResult.TwoFactorRequired)
                     {
-                        this.logger.Write(LogType.Info, "InstaBot.VerifyCode() — Requested two factor auth;");
+                        await this.logger.WriteAsync(LogType.Info, "InstaBot.VerifyCode() — Requested two factor auth;");
                         await ProcessTwoFactorAuth();
                     }
                     else
                     {
                         Console.WriteLine($"ERROR: {verifyLogin.Info.Message}");
-                        this.logger.Write(LogType.Error, $"InstaBot.VerifyCode() — Error details:\n{verifyLogin.Info.Message};");
+                        await this.logger.WriteAsync(LogType.Error, $"InstaBot.VerifyCode() — Error details:\n{verifyLogin.Info.Message};");
                     }
                 }
 
@@ -269,59 +269,59 @@ namespace AveDiaryInstaBot
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: {ex.Message}");
-                this.logger.Write(LogType.Error, $"InstaBot.VerifyCode() — Error details:\n{ex.Message}\n{ex.StackTrace}\n{ex.InnerException};");
+                await this.logger.WriteAsync(LogType.Error, $"InstaBot.VerifyCode() — Error details:\n{ex.Message}\n{ex.StackTrace}\n{ex.InnerException};");
             }
         }
         private async Task SelectPhoneChallenge()
         {
-            this.logger.Write(LogType.Info, "InstaBot.SelectPhoneChallenge() — Requesting SMS Challenge;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.SelectPhoneChallenge() — Requesting SMS Challenge;");
             var phoneNumber = await instaApi.RequestVerifyCodeToSMSForChallengeRequireAsync();
             if (phoneNumber.Succeeded)
             {
-                this.logger.Write(LogType.Info, "InstaBot.SelectPhoneChallenge() — SMS code sent;");
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.SelectPhoneChallenge() — SMS code sent;");
                 Console.WriteLine($"We sent verify code to this phone number(it's end with this): {phoneNumber.Value.StepData.ContactPoint}");
                 Console.Write("Enter code, that you got: ");
                 var code = Console.ReadLine();
 
-                this.logger.Write(LogType.Info, $"InstaBot.SelectPhoneChallenge() — Entered code: '{code}';");
-                this.logger.Write(LogType.Info, "InstaBot.SelectPhoneChallenge() — Starting verifying code;");
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.SelectPhoneChallenge() — Entered code: '{code}';");
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.SelectPhoneChallenge() — Starting verifying code;");
                 await VerifyCode(code);
             }
             else
             {
                 Console.WriteLine($"ERROR: {phoneNumber.Info.Message}");
-                this.logger.Write(LogType.Error, $"InstaBot.SelectPhoneChallenge() — Error message:\n{phoneNumber.Info.Message};");
+                await this.logger.WriteAsync(LogType.Error, $"InstaBot.SelectPhoneChallenge() — Error message:\n{phoneNumber.Info.Message};");
             }
         }
         private async Task ProcessTwoFactorAuth()
         {
-            this.logger.Write(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Entering two factor code;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Entering two factor code;");
             Console.WriteLine("Detected Two Factor Auth. Please, enter your two factor code:");
             var authCode = Console.ReadLine();
 
-            this.logger.Write(LogType.Info, $"InstaBot.ProcessTwoFactorAuth() — Entered code: '{authCode}';");
-            this.logger.Write(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Sending code for verification;");
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessTwoFactorAuth() — Entered code: '{authCode}';");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Sending code for verification;");
             var twoFactorLogin = await instaApi.TwoFactorLoginAsync(authCode);
 
             if (twoFactorLogin.Succeeded)
             {
-                this.logger.Write(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Success, two factor auth passed;");
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.ProcessTwoFactorAuth() — Success, two factor auth passed;");
                 SaveSession();
             }
             else
             {
                 Console.WriteLine("Can't login. May be you entered expired code?");
-                this.logger.Write(LogType.Error, "InstaBot.ProcessTwoFactorAuth() — Two factor code denied;");
+                await this.logger.WriteAsync(LogType.Error, "InstaBot.ProcessTwoFactorAuth() — Two factor code denied;");
             }
         }
-        private void SaveSession(string stateFile = SessionFilename)
+        private async void SaveSession(string stateFile = SessionFilename)
         {
             if (this.instaApi == null)
                 return;
             if (!this.instaApi.IsUserAuthenticated)
                 return;
             this.instaApi.SessionHandler.Save();
-            this.logger.Write(LogType.Info, "InstaBot.SaveSession() — Session saved;");
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.SaveSession() — Session saved;");
         }
         private void LoadSession()
         {
@@ -330,32 +330,55 @@ namespace AveDiaryInstaBot
         
         private async void ApprovePendingUsers()
         {
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.ApprovePendingUsers() — Checking new chats;");
             var pendingUsers = await this.instaApi.MessagingProcessor
                         .GetPendingDirectAsync(PaginationParameters.MaxPagesToLoad(1));
 
             if (pendingUsers.Value.PendingRequestsCount > 0)
             {
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.ApprovePendingUsers() — Got new chats. Starting approving;");
                 foreach (var thread in pendingUsers.Value.Inbox.Threads)
                 {
                     await this.instaApi.MessagingProcessor
                         .ApproveDirectPendingRequestAsync(thread.ThreadId.ToString());
                 }
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.ApprovePendingUsers() — New chats has been approved;");
             }
         }
-        private void ProcessMessage(InstaDirectInboxItem message, string threadId)
+        private async Task ProcessMessage(InstaDirectInboxItem message, string threadId)
         {
+            await this.instaApi.MessagingProcessor.MarkDirectThreadAsSeenAsync(threadId, message.ItemId);
             if (message.ItemType == InstaDirectThreadItemType.Text)
             {
-                if (IsCommand(message.Text, CommandType.Login))
-                    ProcessLoginCommand(message.Text, threadId);
-                else if (IsCommand(message.Text, CommandType.Help))
-                    ProcessHelpCommand(threadId);
-                else if (IsCommand(message.Text, CommandType.TomorrowHomework))
-                    ProcessTomorrowHomeworkCommand(threadId);
-                else if (IsCommand(message.Text, CommandType.AllHomework))
-                    ProcessAllHomeworkCommand(threadId);
-                else
-                    this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, this.botSettings.Answers.UnknownCommand);
+                var userInfo = await this.instaApi.UserProcessor.GetUserInfoByIdAsync(message.UserId);
+                if (userInfo.Value.Username != BotUsername)
+                {
+                    if (IsCommand(message.Text, CommandType.Login))
+                    {
+                        await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessMessage() — Got login command ('{message.Text}'), from @{userInfo.Value.Username};");
+                        await ProcessLoginCommand(message.Text, threadId);
+                    }
+                    else if (IsCommand(message.Text, CommandType.Help))
+                    {
+                        await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessMessage() — Got help command ('{message.Text}'), from @{userInfo.Value.Username};");
+                        await ProcessHelpCommand(threadId);
+                    }
+                    else if (IsCommand(message.Text, CommandType.TomorrowHomework))
+                    {
+                        await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessMessage() — Got tomorrow homework command ('{message.Text}'), from @{userInfo.Value.Username};");
+                        await ProcessTomorrowHomeworkCommand(threadId);
+                    }
+                    else if (IsCommand(message.Text, CommandType.AllHomework))
+                    {
+                        await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessMessage() — Got all homework command ('{message.Text}'), from @{userInfo.Value.Username};");
+                        await ProcessAllHomeworkCommand(threadId);
+                    }
+                    else
+                    {
+                        await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessMessage() — Got unknown command ('{message.Text}'), from @{userInfo.Value.Username};");
+                        await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, this.botSettings.Answers.UnknownCommand);
+                    }
+                }
             }
         }
         private bool IsCommand(string messageText, CommandType commandType)
@@ -376,24 +399,36 @@ namespace AveDiaryInstaBot
                     return false;
             }
         }
-        private async void ProcessLoginCommand(string messageText, string threadId)
+        private async Task ProcessLoginCommand(string messageText, string threadId)
         {
             string answer = string.Empty;
 
             var words = messageText.Split();
             string classLogin = words.Last();
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessLoginCommand() — Checking is class login ('{classLogin}') exists in database;");
             bool isClassLoginExists = await this.diaryApi.IsClassLoginExists(classLogin);
             if (isClassLoginExists)
             {
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessLoginCommand() — Found class login ('{classLogin}') in database;");
                 if (IsStudentExistsInDatabase(threadId))
+                {
+                    await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessLoginCommand() — Updating user's class to ('{classLogin}');");
                     UpdateStudent(threadId, classLogin);
+                }
                 else
+                {
+                    await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessLoginCommand() — Adding user to class '{classLogin}';");
                     AddNewStudent(threadId, classLogin);
+                }
                 answer = this.botSettings.Answers.LoginSaved;
             }
             else
+            {
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessLoginCommand() — Given class login ('{classLogin}') does not exist in database;");
                 answer = this.botSettings.Answers.WrongLogin.Replace("{classLogin}", classLogin);
+            }
 
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessLoginCommand() — Sending answer to user;");
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
         }
         private bool IsStudentExistsInDatabase(string threadId)
@@ -418,7 +453,7 @@ namespace AveDiaryInstaBot
             dbStudent.ClassLogin = newClassLogin;
             this.dbContext.SaveChanges();
         }
-        private async void ProcessHelpCommand(string threadId)
+        private async Task ProcessHelpCommand(string threadId)
         {
             StringBuilder answer = new StringBuilder(this.botSettings.Answers.Help);
             string[] replacementPhrases = { "{helpCommands}", "{loginCommands}", "{tomorrowHomeworkCommands}", "{allHomeworkCommands}" };
@@ -431,13 +466,15 @@ namespace AveDiaryInstaBot
                 answer.Replace(replacementPhrases[commandIndex], avialableCommands.ToString());
             }
 
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessHelpCommand() — Sending help list to user;");
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer.ToString());
         }
-        private async void ProcessTomorrowHomeworkCommand(string threadId)
+        private async Task ProcessTomorrowHomeworkCommand(string threadId)
         {
             var dbStudent = this.dbContext.Students.SingleOrDefault(student => student.ThreadId == threadId);
             if (dbStudent == null)
             {
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessTomorrowHomeworkCommand() — User doesn't have class;");
                 string answer = this.botSettings.Answers.EmptyLogin;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
@@ -447,18 +484,21 @@ namespace AveDiaryInstaBot
             homework = homework.Replace("\\n", Environment.NewLine);
             if (string.IsNullOrWhiteSpace(homework))
             {
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessTomorrowHomeworkCommand() — User doesn't have tomorrow homework;");
                 string answer = this.botSettings.Answers.EmptyTomorrowHomework;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
             }
 
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessTomorrowHomeworkCommand() — Sending tomorrow homework to user;");
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, homework);
         }
-        private async void ProcessAllHomeworkCommand(string threadId)
+        private async Task ProcessAllHomeworkCommand(string threadId)
         {
             var dbStudent = this.dbContext.Students.SingleOrDefault(student => student.ThreadId == threadId);
             if (dbStudent == null)
             {
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessAllHomeworkCommand() — User doesn't have class;");
                 string answer = this.botSettings.Answers.EmptyLogin;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
@@ -468,16 +508,41 @@ namespace AveDiaryInstaBot
             homework = homework.Replace("\\n", Environment.NewLine);
             if (string.IsNullOrWhiteSpace(homework))
             {
+                await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessTomorrowHomeworkCommand() — User doesn't have any homework;");
                 string answer = this.botSettings.Answers.EmptyAllHomework;
                 await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, answer);
                 return;
             }
 
+            await this.logger.WriteAsync(LogType.Info, $"InstaBot.ProcessTomorrowHomeworkCommand() — Sending all homework to user;");
             await this.instaApi.MessagingProcessor.SendDirectTextAsync(null, threadId, homework);
         }
-
-        public void StartPolling()
+        private void ProcessChats(List<InstaDirectInboxThread> chats)
         {
+            var result = Parallel.ForEach(chats, (chat) =>
+            {
+
+                var messages = chat.Items;
+                messages.ForEach(async (message) =>
+                {
+                    await instaApi.MessagingProcessor.MarkDirectThreadAsSeenAsync(chat.ThreadId, message.ItemId);
+                    if (message.UserId != BotId)
+                        await ProcessMessage(message, chat.ThreadId);
+                });
+            });
+
+            double seconds = 0;
+            while (!result.IsCompleted)
+            {
+                seconds += 0.5;
+                Console.WriteLine($"Waiting {seconds}");
+                Thread.Sleep(TimeSpan.FromSeconds(0.5));
+            }
+        }
+
+        public async void StartPolling()
+        {
+            await this.logger.WriteAsync(LogType.Info, "InstaBot.StartPolling() — Bot started to listen chat updates;");
             this.pollingTask = Task.Run(async () =>
             {
                 Console.WriteLine("Polling was started. Press Enter to stop.");
@@ -485,20 +550,20 @@ namespace AveDiaryInstaBot
                 {
                     ApprovePendingUsers();
 
-                    var messages = await this.instaApi.MessagingProcessor
+                    await this.logger.WriteAsync(LogType.Info, "InstaBot.StartPolling() — Getting new messages;");
+                    var inbox = await this.instaApi.MessagingProcessor
                         .GetDirectInboxAsync(PaginationParameters.MaxPagesToLoad(2));
-                    var threads = messages.Value.Inbox.Threads;
-                    foreach (var thread in threads)
+                    var chats = inbox.Value.Inbox.Threads;
+                    foreach (var chat in chats)
                     {
-                        foreach (var message in thread.Items)
+                        foreach (var message in chat.Items)
                         {
                             if (message.UserId != BotId)
-                                ProcessMessage(message, thread.ThreadId);
+                                await ProcessMessage(message, chat.ThreadId);
                         }
                     }
-
-                    Thread.Sleep(TimeSpan.FromSeconds(0.5));
                 }
+                await this.logger.WriteAsync(LogType.Info, "InstaBot.StartPolling() — Bot was stoped;");
                 Console.WriteLine("Polling was stoped.");
             });
         }
